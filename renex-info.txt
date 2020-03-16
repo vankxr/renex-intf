@@ -1,0 +1,136 @@
+request origins
+https://www.rede-expressos.pt/api/locations/origins
+body: "{"national":true,"international":false}"
+headers: {browser-token: "18c98aa5-f9ef-d6c0-4e96-6f4475a0694f", browser-lang: "pt", content-type: "application/json; charset=utf-8"}
+method: "POST"
+
+request destinations
+https://www.rede-expressos.pt/api/locations/destinations
+body: "{"originId":"404","national":true,"international":false}"
+headers: {browser-token: "18c98aa5-f9ef-d6c0-4e96-6f4475a0694f", browser-lang: "pt", content-type: "application/json; charset=utf-8"}
+method: "POST"
+
+request ticket schedule list
+https://www.rede-expressos.pt/api/ticketing/getTickets
+body: "{"rflexNr":"217900","jsonInput":{"idOrigin":"404","idDestination":"1","dateIda":"2019-11-12T00:00:00.000Z","passengerList":[{"fare_type_id":"1","name":"","email":"","doc":"","promocode":"217900","id":"1"}]},"refresh":true}"
+headers: {browser-token: "18c98aa5-f9ef-d6c0-4e96-6f4475a0694f", browser-lang: "pt", content-type: "application/json; charset=utf-8"}
+method: "POST"
+
+{ date: '2019-11-12',
+  schedule_id: '8629699',
+  from: 
+   { id: '1',
+     name: 'LISBOA SETE RIOS',
+     country: 'PT',
+     GPS: { lat: 38.74226, lon: -9.16654 } },
+  to: 
+   { id: '404',
+     name: 'LEIRIA',
+     country: 'PT',
+     GPS: { lat: 39.74535, lon: -8.80543 } },
+  departure_trip_id: '06204',
+  departure_carrier: { id: '60', name: 'Rede Expressos' },
+  departure_time: '00:15',
+  arrival_time: '02:00',
+  travel_time: '1:45',
+  distance: 145,
+  transfers_count: 0,
+  period: 'Realiza-se ate 24 de Novembro',
+  frequency: 'Diariamente',
+  RFLEX_discount: true,
+  min_price: 12.8,
+  min_price_per_type: [ { price_type_id: 'A', price: 12.8 } ],
+  max_price: 12.8,
+  max_price_per_type: [ { price_type_id: 'A', price: 12.8 } ],
+  available_seats: null }
+
+create reservation
+https://www.rede-expressos.pt/api/reservation/create
+body: "{"recover":null,"jsonInput":{"outgoing_schedule":"8682971","outgoing_date":"2019-11-12T00:00:00.000Z","return_schedule":null,"return_date":null,"passengers":[{"fare_type_id":"1","name":"","email":"","doc":"","promocode":"217900","id":"1","price_type_id":"A"}],"recover":null}}"
+headers: {browser-token: "18c98aa5-f9ef-d6c0-4e96-6f4475a0694f", browser-lang: "pt", content-type: "application/json; charset=utf-8"}
+
+answer is plain text reservation token/hash (looks like base64 but decoding gives garbage)
+3qEbuNhcylTDfaQFM+B7wA/zi01n/iqyjDVbR4yT/jwQ2G0ZtfV3K3h2MyHmksuVMoLclilSdmbPWST+MBbbY0XhTAqBMzwJA24XsWm9OrYVcpbQ2tIO9EKA8ewBsZi9
+
+
+
+get reservation id
+https://www.rede-expressos.pt/api/reservation/details
+body: "{"Id":"oioCoXxBylLzXLwXZHN8gLmWbLeGUGQjMtrkMkD7rY2kY/9kNKTGtkSh77SxsCNaZoIk98rHMcz+7hwl2z7vXQvvAQhBXFqVlrq5fwt2nksvvr9nrwraQQpQQkRqJBvT"}"
+headers: {browser-token: "18c98aa5-f9ef-d6c0-4e96-6f4475a0694f", browser-lang: "pt", content-type: "application/json; charset=utf-8"}
+method: "POST"
+
+
+
+
+get reservation details
+https://www.rede-expressos.pt/api/ticketing_new/reservationInfo
+body: "{"reservationId":"76979"}"
+headers: {browser-token: "18c98aa5-f9ef-d6c0-4e96-6f4475a0694f", browser-lang: "pt", content-type: "application/json; charset=utf-8"}
+method: "POST"
+
+
+
+seat reservation
+https://www.rede-expressos.pt/api/ticketing_new/seats/list
+body: "{"reservationId":"76979"}"
+headers: {browser-token: "18c98aa5-f9ef-d6c0-4e96-6f4475a0694f", browser-lang: "pt", content-type: "application/json; charset=utf-8"}
+method: "POST"
+
+if expired response is 
+{
+    "__type": "APIDTO.API.BookingSeats",
+    "booking_id": "76979",
+    "outgoing_itinerary": null,
+    "return_itinerary": null
+}
+
+
+change seat
+https://www.rede-expressos.pt/api/ticketing_new/seats/change
+body: "{"reservationNr":"76979","jsonInput":[{"outgoing_leg_no":"1","return_leg_no":null,"current_seat_no":2,"new_seat_no":29,"passenger_id":"1"}]}"
+headers: {browser-token: "18c98aa5-f9ef-d6c0-4e96-6f4475a0694f", browser-lang: "pt", content-type: "application/json; charset=utf-8"}
+method: "POST"
+
+
+
+
+
+
+
+
+
+
+
+USER - here browser token matters
+
+login
+https://www.rede-expressos.pt/api/app/login
+body: "{"user":"2170313@my.ipleiria.pt","password":"1234"}"
+headers: {browser-token: "18c98aa5-f9ef-d6c0-4e96-6f4475a0694f", browser-lang: "pt", content-type: "application/json; charset=utf-8"}
+method: "POST"
+
+logout
+https://www.rede-expressos.pt/api/app/logout
+headers: {browser-token: "051cdd35-6623-8142-1f0e-36a63d5b4356", browser-lang: "pt", content-type: "application/json; charset=utf-8"}
+method: "GET"
+
+get tickets
+https://www.rede-expressos.pt/api/user/history
+headers: {browser-token: "051cdd35-6623-8142-1f0e-36a63d5b4356", browser-lang: "pt", content-type: "application/json; charset=utf-8"}
+method: "GET"
+
+returns an array, to get pdf for ticket:
+https://www.rede-expressos.pt/api/user/ticket?ticketNr=<idTicket>&fileName=<nTicket>_<nReservation>.pdf
+https://www.rede-expressos.pt/api/user/invoice?reservationInvoiceId=<PaymentInvoiceID>&fileName=<nTicket>_INVOICE_<PaymentInvoiceID>.pdf
+
+keepalive (send regularly to keep sessiona live)
+https://www.rede-expressos.pt/api/app/keepalive
+headers: {browser-token: "051cdd35-6623-8142-1f0e-36a63d5b4356", browser-lang: "pt", content-type: "application/json; charset=utf-8"}
+method: "GET"
+
+
+
+
+errors:
+ERROR 32 DETAIL 48 - Lotação esgotada

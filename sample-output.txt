@@ -1,0 +1,23 @@
+Fetching origins...
+Fetched 322 origins!
+Found origin 'LISBOA SETE RIOS'. ID: 1
+Fetching destinations for 'LISBOA SETE RIOS'...
+Fetched 315 destinations!
+Found destination 'LEIRIA'. ID: 404
+Fetching ticket schedules for 'LISBOA SETE RIOS' > 'LEIRIA' on Fri Mar 20 2020 20:00:00 GMT+0000 (WET)...
+Fetched 31 schedules!
+Found schedule departing on Fri Mar 20 2020 20:00:00 GMT+0000 (WET) and arriving on Fri Mar 20 2020 21:45:00 GMT+0000 (WET). ID: 8753690
+Creating reservation for schedule '8753690'...
+Created reservation!
+Getting reservation details...
+Reservation ID: 750389
+Getting seat details...
+Got current seat: 5
+Changing current seat 5 to 30
+Got current seat: 30
+Got current seat: 30
+Got current seat: 30
+Got current seat: 30
+Got current seat: 30
+Got current seat: 30
+..
