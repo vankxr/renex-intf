@@ -2,18 +2,18 @@ const HTTPS = require("https");
 
 const desired_origin = "LISBOA SETE RIOS";
 const desired_destination = "LEIRIA";
-const desired_date = new Date(2020, 3 - 1, 20, 20, 00);
+const desired_date = new Date(2020, 6 - 1, 25, 20, 00);
 const desired_seat = 30;
 
-var origins = [];
+let origins = [];
 
 ////////////////////////////////////////////////
 function gen_browser_token()
 {
-    var result = "";
-    var characters = "abcdef0123456789";
+    let result = "";
+    let characters = "abcdef0123456789";
 
-    for(var i = 0; i < 32; i++)
+    for(let i = 0; i < 32; i++)
     {
         result += characters.charAt(Math.floor(Math.random() * characters.length));
 
@@ -25,7 +25,7 @@ function gen_browser_token()
 }
 function is_seat_free(map, seat)
 {
-    for(var i = 0; i < map.length; i++)
+    for(let i = 0; i < map.length; i++)
     {
         if(seat >= map[i].first && seat <= map[i].last)
             return true;
@@ -33,122 +33,61 @@ function is_seat_free(map, seat)
 
     return false;
 }
-
-function keep_seat_reserved(browser_token, schedule, passenger, seat)
+async function sleep(ms)
 {
-    console.log("Creating reservation for schedule '" + schedule.schedule_id + "'...");
-
-    create_reservation(
-        browser_token,
-        schedule,
-        null,
-        passenger,
-        function (e, reservation_token)
+    return new Promise(resolve => setTimeout(resolve, ms));
+}
+////////////////////////////////////////////////
+async function https_request(options, body)
+{
+    return new Promise(
+        function (resolve, reject)
         {
-            if(e)
-                return console.error(e);
-
-            if(!reservation_token)
-                return console.error("Malformated response");
-
-            console.log("Created reservation!");
-            console.log("Getting reservation details...");
-
-            get_reservation_details(
-                browser_token,
-                reservation_token,
-                function (e, reservation_details)
+            const req = HTTPS.request(
+                options,
+                function (res)
                 {
-                    if(e)
-                        return console.error(e);
+                    res.body = [];
 
-                    //console.log(require("util").inspect(reservation_details, {showHidden: false, depth: null}))
+                    res.on('data',
+                        function (chunk)
+                        {
+                            res.body.push(chunk);
+                        }
+                    );
 
-                    var reservation_id = reservation_details.reservationId;
+                    res.on('end',
+                        function()
+                        {
+                            res.body = Buffer.concat(res.body);
 
-                    console.log("Reservation ID: " + reservation_id);
-                    console.log("Getting seat details...");
-
-                    function check_reservation()
-                    {
-                        get_seat_list(
-                            browser_token,
-                            reservation_id,
-                            function (e, seat_details)
-                            {
-                                if(e)
-                                    return console.error(e);
-
-                                //console.log(require("util").inspect(seat_details, {showHidden: false, depth: null}))
-
-                                if(!seat_details.outgoing_itinerary ||
-                                   !seat_details.outgoing_itinerary.legs ||
-                                   !seat_details.outgoing_itinerary.legs.length ||
-                                   !seat_details.outgoing_itinerary.legs[0].available_seats ||
-                                   !seat_details.outgoing_itinerary.legs[0].assigned_seats ||
-                                   !seat_details.outgoing_itinerary.legs[0].assigned_seats.length)
-                                {
-                                    console.log("Expired reservation!");
-
-                                    return keep_seat_reserved(gen_browser_token(), schedule, passenger, seat);
-                                }
-
-                                var seat_map = seat_details.outgoing_itinerary.legs[0].available_seats;
-                                var current_seat = seat_details.outgoing_itinerary.legs[0].assigned_seats[0].seat_no;
-
-                                console.log("Got current seat: " + current_seat);
-
-                                if(current_seat != seat)
-                                {
-                                    if(!is_seat_free(seat_map, seat))
-                                    {
-                                        console.log("Desired seat is not free!");
-                                    }
-                                    else
-                                    {
-                                        console.log("Changing current seat " + current_seat + " to " + seat);
-
-                                        change_seat(
-                                            browser_token,
-                                            reservation_id,
-                                            1,
-                                            null,
-                                            current_seat,
-                                            seat,
-                                            function (e, seat_details)
-                                            {
-                                                if(e)
-                                                    return console.error(e);
-
-                                                //console.log(require("util").inspect(seat_details, {showHidden: false, depth: null}))
-                                            }
-                                        );
-                                    }
-                                }
-
-                                setTimeout(check_reservation, 2000);
-                            }
-                        );
-                    }
-
-                    check_reservation();
+                            return resolve(res);
+                        }
+                    );
                 }
-            );
+            )
+
+            req.on("error", reject);
+
+            if(body)
+                req.write(body);
+
+            req.end();
         }
     );
 }
 
-function fetch_origins(browser_token, national, international, callback)
+async function fetch_origins(browser_token, national, international)
 {
-    var payload = {
+    let payload = {
         national: national,
         international: international
     };
 
-    var req_body = JSON.stringify(payload);
-    var req_options = {
+    let req_body = JSON.stringify(payload);
+    let req_options = {
         host: "www.rede-expressos.pt",
-        port: "443",
+        port: 443,
         path: "/api/locations/origins",
         method: "POST",
         headers: {
@@ -159,61 +98,28 @@ function fetch_origins(browser_token, national, international, callback)
         }
     };
 
-    var req = HTTPS.request(
-        req_options,
-        function (response)
-        {
-            response.body = [];
+    let res = await https_request(req_options, req_body);
 
-            response.on('data',
-                function(chunk)
-                {
-                    response.body.push(chunk);
-                }
-            );
+    if(res.statusCode != 200)
+        throw new Error("Request unsuccessfull (" + res.statusCode + ")");
 
-            response.on('end',
-                function()
-                {
-                    if(response.statusCode != 200)
-                        return callback("Request unsuccessfull (" + response.statusCode + ")");
+    if(!res.body)
+        throw new Error("Invalid body");
 
-                    response.body = Buffer.concat(response.body);
-
-                    if(!response.body)
-                        return callback("Invalid body");
-
-                    try
-                    {
-                        response.body = JSON.parse(response.body);
-                    }
-                    catch (e)
-                    {
-                        return callback(e);
-                    }
-
-                    return callback(null, response.body);
-                }
-            );
-        }
-    )
-
-    req.on("error", callback);
-    req.write(req_body);
-    req.end();
+    return JSON.parse(res.body);
 }
-function fetch_destinations(browser_token, origin_id, national, international, callback)
+async function fetch_destinations(browser_token, origin_id, national, international)
 {
-    var payload = {
+    let payload = {
         national: national,
         international: international,
         originId: origin_id.toString()
     };
 
-    var req_body = JSON.stringify(payload);
-    var req_options = {
+    let req_body = JSON.stringify(payload);
+    let req_options = {
         host: "www.rede-expressos.pt",
-        port: "443",
+        port: 443,
         path: "/api/locations/destinations",
         method: "POST",
         headers: {
@@ -224,52 +130,19 @@ function fetch_destinations(browser_token, origin_id, national, international, c
         }
     };
 
-    var req = HTTPS.request(
-        req_options,
-        function (response)
-        {
-            response.body = [];
+    let res = await https_request(req_options, req_body);
 
-            response.on('data',
-                function(chunk)
-                {
-                    response.body.push(chunk);
-                }
-            );
+    if(res.statusCode != 200)
+        throw new Error("Request unsuccessfull (" + res.statusCode + ")");
 
-            response.on('end',
-                function()
-                {
-                    if(response.statusCode != 200)
-                        return callback("Request unsuccessfull (" + response.statusCode + ")");
+    if(!res.body)
+        throw new Error("Invalid body");
 
-                    response.body = Buffer.concat(response.body);
-
-                    if(!response.body)
-                        return callback("Invalid body");
-
-                    try
-                    {
-                        response.body = JSON.parse(response.body);
-                    }
-                    catch (e)
-                    {
-                        return callback(e);
-                    }
-
-                    return callback(null, response.body);
-                }
-            );
-        }
-    )
-
-    req.on("error", callback);
-    req.write(req_body);
-    req.end();
+    return JSON.parse(res.body);
 }
-function fetch_ticket_schedules(browser_token, rflex_id, origin_id, destination_id, outgoing_date, passengers, callback)
+async function fetch_ticket_schedules(browser_token, rflex_id, origin_id, destination_id, outgoing_date, passengers)
 {
-    var payload = {
+    let payload = {
         rflexNr: rflex_id > 0 ? rflex_id.toString : "",
         jsonInput: {
             idOrigin: origin_id.toString(),
@@ -280,11 +153,11 @@ function fetch_ticket_schedules(browser_token, rflex_id, origin_id, destination_
         refresh: true
     };
 
-    var req_body = JSON.stringify(payload);
-    var req_options = {
+    let req_body = JSON.stringify(payload);
+    let req_options = {
         host: "www.rede-expressos.pt",
-        port: "443",
-        path: "/api/ticketing/getTickets",
+        port: 443,
+        path: "/api/ticketing/schedules",
         method: "POST",
         headers: {
             "Content-Type": "application/json; charset=utf-8",
@@ -294,52 +167,19 @@ function fetch_ticket_schedules(browser_token, rflex_id, origin_id, destination_
         }
     };
 
-    var req = HTTPS.request(
-        req_options,
-        function (response)
-        {
-            response.body = [];
+    let res = await https_request(req_options, req_body);
 
-            response.on('data',
-                function(chunk)
-                {
-                    response.body.push(chunk);
-                }
-            );
+    if(res.statusCode != 200)
+        throw new Error("Request unsuccessfull (" + res.statusCode + ")");
 
-            response.on('end',
-                function()
-                {
-                    if(response.statusCode != 200)
-                        return callback("Request unsuccessfull (" + response.statusCode + ")");
+    if(!res.body)
+        throw new Error("Invalid body");
 
-                    response.body = Buffer.concat(response.body);
-
-                    if(!response.body)
-                        return callback("Invalid body");
-
-                    try
-                    {
-                        response.body = JSON.parse(response.body);
-                    }
-                    catch (e)
-                    {
-                        return callback(e);
-                    }
-
-                    return callback(null, response.body);
-                }
-            );
-        }
-    )
-
-    req.on("error", callback);
-    req.write(req_body);
-    req.end();
+    return JSON.parse(res.body);
 }
-function create_reservation(browser_token, outgoing_schedule, return_schedule, passengers, callback)
+async function create_reservation(browser_token, outgoing_schedule, return_schedule, passengers)
 {
-    var payload = {
+    let payload = {
         jsonInput: {
             outgoing_schedule: outgoing_schedule.schedule_id.toString(),
             outgoing_date: outgoing_schedule.departure_date.toISOString(),
@@ -350,10 +190,10 @@ function create_reservation(browser_token, outgoing_schedule, return_schedule, p
         recover: null
     };
 
-    var req_body = JSON.stringify(payload);
-    var req_options = {
+    let req_body = JSON.stringify(payload);
+    let req_options = {
         host: "www.rede-expressos.pt",
-        port: "443",
+        port: 443,
         path: "/api/reservation/create",
         method: "POST",
         headers: {
@@ -364,53 +204,32 @@ function create_reservation(browser_token, outgoing_schedule, return_schedule, p
         }
     };
 
-    var req = HTTPS.request(
-        req_options,
-        function (response)
-        {
-            response.body = [];
+    let res = await https_request(req_options, req_body);
 
-            response.on('data',
-                function(chunk)
-                {
-                    response.body.push(chunk);
-                }
-            );
+    if(res.statusCode != 200)
+        throw new Error("Request unsuccessfull (" + res.statusCode + ")");
 
-            response.on('end',
-                function()
-                {
-                    if(response.statusCode != 200)
-                        return callback("Request unsuccessfull (" + response.statusCode + ")");
+    if(!res.body)
+        throw new Error("Invalid body");
 
-                    response.body = Buffer.concat(response.body);
+    res.body = res.body.toString("utf8"); // Response is plain text, some kind of token (looks like base64 but decoding yields garbage)
+    res.body = res.body.substr(1, res.body.length - 2); // Remove quotes at the start and end
 
-                    if(!response.body)
-                        return callback("Invalid body");
+    if(!res.body)
+        throw new Error("Malformated response");
 
-                    response.body = response.body.toString("utf8"); // Response is plain text, some kind of token (looks like base64 but decoding yields garbage)
-                    response.body = response.body.substr(1, response.body.length - 2); // Remove quotes at the start and end
-
-                    return callback(null, response.body);
-                }
-            );
-        }
-    )
-
-    req.on("error", callback);
-    req.write(req_body);
-    req.end();
+    return res.body;
 }
-function get_reservation_details(browser_token, reservation_token, callback)
+async function get_reservation_details(browser_token, reservation_token)
 {
-    var payload = {
+    let payload = {
         Id: reservation_token
     };
 
-    var req_body = JSON.stringify(payload);
-    var req_options = {
+    let req_body = JSON.stringify(payload);
+    let req_options = {
         host: "www.rede-expressos.pt",
-        port: "443",
+        port: 443,
         path: "/api/reservation/details",
         method: "POST",
         headers: {
@@ -421,123 +240,50 @@ function get_reservation_details(browser_token, reservation_token, callback)
         }
     };
 
-    var req = HTTPS.request(
-        req_options,
-        function (response)
-        {
-            response.body = [];
+    let res = await https_request(req_options, req_body);
 
-            response.on('data',
-                function(chunk)
-                {
-                    response.body.push(chunk);
-                }
-            );
+    if(res.statusCode != 200)
+        throw new Error("Request unsuccessfull (" + res.statusCode + ")");
 
-            response.on('end',
-                function()
-                {
-                    if(response.statusCode != 200)
-                        return callback("Request unsuccessfull (" + response.statusCode + ")");
+    if(!res.body)
+        throw new Error("Invalid body");
 
-                    response.body = Buffer.concat(response.body);
-
-                    if(!response.body)
-                        return callback("Invalid body");
-
-                    try
-                    {
-                        response.body = JSON.parse(response.body);
-                    }
-                    catch (e)
-                    {
-                        return callback(e);
-                    }
-
-                    return callback(null, response.body);
-                }
-            );
-        }
-    )
-
-    req.on("error", callback);
-    req.write(req_body);
-    req.end();
+    return JSON.parse(res.body);
 }
-function get_seat_list(browser_token, reservation_id, callback)
+async function get_seat_list(browser_token, reservation_id)
 {
-    var payload = {
-        reservationId: reservation_id
-    };
-
-    var req_body = JSON.stringify(payload);
-    var req_options = {
+    let req_options = {
         host: "www.rede-expressos.pt",
-        port: "443",
-        path: "/api/ticketing_new/seats/list",
-        method: "POST",
+        port: 443,
+        path: "/api/bookings/seats/get?reservationId=" + reservation_id,
+        method: "GET",
         headers: {
-            "Content-Type": "application/json; charset=utf-8",
-            "Content-Length": req_body.length,
             "Browser-Lang": "pt",
             "Browser-Token": browser_token
         }
     };
 
-    var req = HTTPS.request(
-        req_options,
-        function (response)
-        {
-            response.body = [];
+    let res = await https_request(req_options);
 
-            response.on('data',
-                function(chunk)
-                {
-                    response.body.push(chunk);
-                }
-            );
+    if(res.statusCode != 200)
+        throw new Error("Request unsuccessfull (" + res.statusCode + ")");
 
-            response.on('end',
-                function()
-                {
-                    if(response.statusCode != 200)
-                        return callback("Request unsuccessfull (" + response.statusCode + ")");
+    if(!res.body)
+        throw new Error("Invalid body");
 
-                    response.body = Buffer.concat(response.body);
-
-                    if(!response.body)
-                        return callback("Invalid body");
-
-                    try
-                    {
-                        response.body = JSON.parse(response.body);
-                    }
-                    catch (e)
-                    {
-                        return callback(e);
-                    }
-
-                    return callback(null, response.body);
-                }
-            );
-        }
-    )
-
-    req.on("error", callback);
-    req.write(req_body);
-    req.end();
+    return JSON.parse(res.body);
 }
-function change_seat(browser_token, reservation_id, outgoing_leg, return_leg, current_seat, new_seat, callback)
+async function change_seat(browser_token, reservation_id, outgoing_leg, return_leg, current_seat, new_seat)
 {
-    var payload = {
-        reservationNr: reservation_id,
+    let payload = {
+        reservationId: reservation_id,
         jsonInput: []
     };
 
     current_seat = current_seat.length ? current_seat : [current_seat];
     new_seat = new_seat.length ? new_seat : [new_seat];
 
-    for(var i = 0; i < current_seat.length; i++)
+    for(let i = 0; i < current_seat.length; i++)
     {
         payload.jsonInput[i] = {
             outgoing_leg_no: outgoing_leg, // Trip branch (if there is need to switch buses)
@@ -548,11 +294,11 @@ function change_seat(browser_token, reservation_id, outgoing_leg, return_leg, cu
         }
     }
 
-    var req_body = JSON.stringify(payload);
-    var req_options = {
+    let req_body = JSON.stringify(payload);
+    let req_options = {
         host: "www.rede-expressos.pt",
-        port: "443",
-        path: "/api/ticketing_new/seats/change",
+        port: 443,
+        path: "/api/bookings/seats/change",
         method: "POST",
         headers: {
             "Content-Type": "application/json; charset=utf-8",
@@ -562,184 +308,268 @@ function change_seat(browser_token, reservation_id, outgoing_leg, return_leg, cu
         }
     };
 
-    var req = HTTPS.request(
-        req_options,
-        function (response)
-        {
-            response.body = [];
+    let res = await https_request(req_options, req_body);
 
-            response.on('data',
-                function(chunk)
-                {
-                    response.body.push(chunk);
-                }
-            );
+    if(res.statusCode != 200)
+        throw new Error("Request unsuccessfull (" + res.statusCode + ")");
 
-            response.on('end',
-                function()
-                {
-                    if(response.statusCode != 200)
-                        return callback("Request unsuccessfull (" + response.statusCode + ")");
+    if(!res.body)
+        throw new Error("Invalid body");
 
-                    response.body = Buffer.concat(response.body);
-
-                    if(!response.body)
-                        return callback("Invalid body");
-
-                    try
-                    {
-                        response.body = JSON.parse(response.body);
-                    }
-                    catch (e)
-                    {
-                        return callback(e);
-                    }
-
-                    return callback(null, response.body);
-                }
-            );
-        }
-    )
-
-    req.on("error", callback);
-    req.write(req_body);
-    req.end();
+    return JSON.parse(res.body);
 }
 ////////////////////////////////////////////////
 
-var browser_token = gen_browser_token();
+async function main()
+{
+    let browser_token = gen_browser_token();
 
-console.log("Fetching origins...");
+    console.log("Generated browser token: " + browser_token);
 
-fetch_origins(
-    browser_token,
-    true,
-    false,
-    function (e, fetched_origins)
+    console.log("Fetching origins...");
+
+    let fetched_origins;
+
+    try
     {
-        if(e)
-            return console.error(e);
+        fetched_origins = await fetch_origins(browser_token, true, false);
 
         console.log("Fetched " + fetched_origins.length + " origins!");
+    }
+    catch (e)
+    {
+        return console.error("Error fetching origins: " + e);
+    }
 
-        var desired_origin_id = 0;
+    let desired_origin_id;
 
-        for(var i = 0; i < fetched_origins.length; i++)
+    for(let i = 0; i < fetched_origins.length; i++)
+    {
+        //console.log(fetched_origins[i].id + " - " + fetched_origins[i].name);
+
+        origins[i] = {
+            id: parseInt(fetched_origins[i].id),
+            name: fetched_origins[i].name
+        };
+
+        if(fetched_origins[i].name === desired_origin)
         {
-            //console.log(fetched_origins[i].id + " - " + fetched_origins[i].name);
+            desired_origin_id = parseInt(fetched_origins[i].id);
 
-            origins[i] = {
-                id: parseInt(fetched_origins[i].id),
-                name: fetched_origins[i].name
-            };
+            break;
+        }
+    }
 
-            if(fetched_origins[i].name == desired_origin)
-            {
-                console.log("Found origin '" + desired_origin + "'. ID: " + fetched_origins[i].id);
+    if(desired_origin_id === undefined)
+        return console.error("Desired origin not found!");
 
-                desired_origin_id = parseInt(fetched_origins[i].id);
-            }
+    console.log("Found origin '" + desired_origin + "'. ID: " + desired_origin_id);
+
+    console.log("Fetching destinations for '" + desired_origin + "'...");
+
+    let fetched_destinations;
+
+    try
+    {
+        fetched_destinations = await fetch_destinations(browser_token, desired_origin_id, true, false);
+
+        console.log("Fetched " + fetched_destinations.length + " destinations!");
+    }
+    catch (e)
+    {
+        return console.error("Error fetching destinations: " + e);
+    }
+
+    let desired_destination_id;
+
+    for(let i = 0; i < fetched_destinations.length; i++)
+    {
+        //console.log(fetched_destinations[i].id + " - " + fetched_destinations[i].name);
+
+        if(fetched_destinations[i].name == desired_destination)
+        {
+            desired_destination_id = parseInt(fetched_destinations[i].id);
+
+            break;
+        }
+    }
+
+    if(desired_destination_id === undefined)
+        return console.error("Desired destination not found!");
+
+    console.log("Found destination '" + desired_destination + "'. ID: " + desired_destination_id);
+
+    let passenger = {
+        fare_type_id: 1,
+        name: "",
+        email: "",
+        doc: "",
+        promocode: "", // RFLEX ID
+        id: "1"
+    };
+
+    console.log("Fetching ticket schedules for '" + desired_origin + "' > '" + desired_destination + "' on " + desired_date.toString() + "...");
+
+    let fetched_schedules;
+
+    try
+    {
+        fetched_schedules = await fetch_ticket_schedules(browser_token, null, desired_origin_id, desired_destination_id, desired_date, passenger);
+
+        if(!fetched_schedules.length || !fetched_schedules[0] || !fetched_schedules[0].outgoing_schedules)
+            return console.error("Malformated response");
+
+        fetched_schedules = fetched_schedules[0].outgoing_schedules;
+
+        console.log("Fetched " + fetched_schedules.length + " schedules!");
+    }
+    catch (e)
+    {
+        return console.error("Error fetching schedules: " + e);
+    }
+
+    let desired_schedule;
+    let min_schedule_difference = Infinity;
+
+    for(let i = 0; i < fetched_schedules.length; i++)
+    {
+        //console.log(require("util").inspect(fetched_schedules[i], {showHidden: false, depth: null}))
+
+        fetched_schedules[i].departure_date = new Date(
+            parseInt(fetched_schedules[i].date.substr(0, 4)),
+            parseInt(fetched_schedules[i].date.substr(5, 2)) - 1,
+            parseInt(fetched_schedules[i].date.substr(8, 2)),
+            parseInt(fetched_schedules[i].departure_time.substr(0, 2)),
+            parseInt(fetched_schedules[i].departure_time.substr(3, 2))
+        );
+
+        fetched_schedules[i].arrival_date = new Date(
+            parseInt(fetched_schedules[i].date.substr(0, 4)),
+            parseInt(fetched_schedules[i].date.substr(5, 2)) - 1,
+            parseInt(fetched_schedules[i].date.substr(8, 2)),
+            parseInt(fetched_schedules[i].arrival_time.substr(0, 2)),
+            parseInt(fetched_schedules[i].arrival_time.substr(3, 2))
+        );
+
+        let schedule_difference = Math.abs(desired_date.getTime() - fetched_schedules[i].departure_date.getTime());
+
+        if(schedule_difference < min_schedule_difference)
+        {
+            min_schedule_difference = schedule_difference;
+
+            desired_schedule = fetched_schedules[i];
+        }
+    }
+
+    if(desired_schedule === undefined)
+        return console.error("No schedule found!");
+
+    console.log("Found schedule departing on " + desired_schedule.departure_date.toString() + " and arriving on " + desired_schedule.arrival_date.toString() + ". ID: " + desired_schedule.schedule_id);
+
+    while(desired_schedule.departure_date.getTime() > new Date().getTime())
+    {
+        browser_token = gen_browser_token();
+
+        console.log("Generated browser token: " + browser_token);
+
+        console.log("Creating reservation for schedule '" + desired_schedule.schedule_id + "'...");
+
+        let reservation_token;
+
+        try
+        {
+            reservation_token = await create_reservation(browser_token, desired_schedule, null, passenger);
+
+            console.log("Created reservation!");
+        }
+        catch (e)
+        {
+            return console.error("Error creating reservation: " + e);
         }
 
-        console.log("Fetching destinations for '" + desired_origin + "'...");
+        console.log("Getting reservation details...");
 
-        fetch_destinations(
-            browser_token,
-            desired_origin_id,
-            true,
-            false,
-            function (e, fetched_destinations)
+        let reservation_id;
+
+        try
+        {
+            reservation_details = await get_reservation_details(browser_token, reservation_token);
+
+            //console.log(require("util").inspect(reservation_details, {showHidden: false, depth: null}))
+
+            reservation_id = reservation_details.reservationId;
+
+            console.log("Reservation ID: " + reservation_id);
+        }
+        catch (e)
+        {
+            return console.error("Error getting reservation details: " + e);
+        }
+
+        while(true)
+        {
+            console.log("Getting seat details...");
+
+            let seat_details;
+
+            try
             {
-                if(e)
-                    return console.error(e);
+                seat_details = await get_seat_list(browser_token, reservation_id);
 
-                console.log("Fetched " + fetched_destinations.length + " destinations!");
+                //console.log(require("util").inspect(seat_details, {showHidden: false, depth: null}))
 
-                var desired_destination_id = 0;
-
-                for(var i = 0; i < fetched_destinations.length; i++)
+                if(!seat_details.outgoing_itinerary ||
+                    !seat_details.outgoing_itinerary.legs ||
+                    !seat_details.outgoing_itinerary.legs.length ||
+                    !seat_details.outgoing_itinerary.legs[0].available_seats ||
+                    !seat_details.outgoing_itinerary.legs[0].assigned_seats ||
+                    !seat_details.outgoing_itinerary.legs[0].assigned_seats.length)
                 {
-                    //console.log(fetched_destinations[i].id + " - " + fetched_destinations[i].name);
+                    console.log("Expired reservation!");
 
-                    if(fetched_destinations[i].name == desired_destination)
+                    break;
+                }
+            }
+            catch (e)
+            {
+                return console.error("Error getting seat details: " + e);
+            }
+
+            let seat_map = seat_details.outgoing_itinerary.legs[0].available_seats;
+            let current_seat = seat_details.outgoing_itinerary.legs[0].assigned_seats[0].seat_no;
+
+            console.log("Got current seat: " + current_seat);
+
+            if(current_seat != desired_seat)
+            {
+                if(!is_seat_free(seat_map, desired_seat))
+                {
+                    console.log("Desired seat is not free!");
+                }
+                else
+                {
+                    console.log("Changing current seat " + current_seat + " to " + desired_seat);
+
+                    try
                     {
-                        console.log("Found destination '" + desired_destination + "'. ID: " + fetched_destinations[i].id);
+                        await change_seat(browser_token, reservation_id, 1, null, current_seat, desired_seat);
 
-                        desired_destination_id = parseInt(fetched_destinations[i].id);
-
-                        break;
+                        //console.log(require("util").inspect(seat_details, {showHidden: false, depth: null}))
+                    }
+                    catch (e)
+                    {
+                        return console.error("Error changing seat: " + e);
                     }
                 }
 
-                console.log("Fetching ticket schedules for '" + desired_origin + "' > '" + desired_destination + "' on " + desired_date.toString() + "...");
-
-                var passenger = {
-                    fare_type_id: 1,
-                    name: "",
-                    email: "",
-                    doc: "",
-                    promocode: "", // RFLEX ID
-                    id: "1"
-                };
-
-                fetch_ticket_schedules(
-                    browser_token,
-                    null,
-                    desired_origin_id,
-                    desired_destination_id,
-                    desired_date,
-                    passenger,
-                    function (e, fetched_schedules)
-                    {
-                        if(e)
-                            return console.error(e);
-
-                        if(!fetched_schedules.length || !fetched_schedules[0] || !fetched_schedules[0].outgoing_schedules)
-                            return console.error("Malformated response");
-
-                        fetched_schedules = fetched_schedules[0].outgoing_schedules;
-
-                        console.log("Fetched " + fetched_schedules.length + " schedules!");
-
-                        var desired_schedule = undefined;
-                        var min_schedule_difference = Date.now();
-
-                        for(var i = 0; i < fetched_schedules.length; i++)
-                        {
-                            //console.log(require("util").inspect(fetched_schedules[i], {showHidden: false, depth: null}))
-
-                            fetched_schedules[i].departure_date = new Date(
-                                parseInt(fetched_schedules[i].date.substr(0, 4)),
-                                parseInt(fetched_schedules[i].date.substr(5, 2)) - 1,
-                                parseInt(fetched_schedules[i].date.substr(8, 2)),
-                                parseInt(fetched_schedules[i].departure_time.substr(0, 2)),
-                                parseInt(fetched_schedules[i].departure_time.substr(3, 2))
-                            );
-
-                            fetched_schedules[i].arrival_date = new Date(
-                                parseInt(fetched_schedules[i].date.substr(0, 4)),
-                                parseInt(fetched_schedules[i].date.substr(5, 2)) - 1,
-                                parseInt(fetched_schedules[i].date.substr(8, 2)),
-                                parseInt(fetched_schedules[i].arrival_time.substr(0, 2)),
-                                parseInt(fetched_schedules[i].arrival_time.substr(3, 2))
-                            );
-
-                            var schedule_difference = Math.abs(desired_date.getTime() - fetched_schedules[i].departure_date.getTime());
-
-                            if(schedule_difference < min_schedule_difference)
-                            {
-                                min_schedule_difference = schedule_difference;
-
-                                desired_schedule = fetched_schedules[i];
-                            }
-                        }
-
-                        console.log("Found schedule departing on " + desired_schedule.departure_date.toString() + " and arriving on " + desired_schedule.arrival_date.toString() + ". ID: " + desired_schedule.schedule_id);
-
-                        keep_seat_reserved(browser_token, desired_schedule, passenger, desired_seat);
-                    }
-                );
+                await sleep(1000);
             }
-        );
+            else
+            {
+                await sleep(5000);
+            }
+        }
     }
-);
+}
+
+main();
