@@ -1,13 +1,130 @@
+const HTTP = require("http");
 const HTTPS = require("https");
+const ChildProcess = require("child_process");
 
-const desired_origin = "LISBOA SETE RIOS";
-const desired_destination = "LEIRIA";
-const desired_date = new Date(2020, 6 - 1, 25, 20, 00);
+const captcha_renex_site_key = "6LfSWqkZAAAAAEkwPYmrpzgjwivDtoJBkybcK7v-";
+const captcha_server_port = 3000;
+const captcha_fake_subdomain = "auto";
+
+const desired_origin = "LEIRIA";
+const desired_destination = "LISBOA SETE RIOS";
+const desired_date = new Date(2020, 9 - 1, 24, 14, 45);
 const desired_seat = 30;
 
 let origins = [];
 
 ////////////////////////////////////////////////
+async function gen_captcha_token(action)
+{
+    return new Promise(
+        function (resolve, reject)
+        {
+            // Check for our fake subdomain in the hosts file, if it's not there, add it
+            ChildProcess.exec(
+                "nslookup " + captcha_fake_subdomain + ".rede-expressos.pt",
+                function (e, stdout, stderr)
+                {
+                    if(e && e.code == 1 && stdout && stdout.indexOf("** server can't find " + captcha_fake_subdomain + ".rede-expressos.pt: NXDOMAIN") !== -1)
+                    {
+                        ChildProcess.execSync("echo \"\" >> /etc/hosts");
+                        ChildProcess.execSync("echo \"# Used by renex-intf\" >> /etc/hosts");
+                        ChildProcess.execSync("echo \"127.0.0.1\t" + captcha_fake_subdomain + ".rede-expressos.pt\" >> /etc/hosts");
+                    }
+                }
+            );
+
+            // grecaptcha token generation HTML/JS
+            let html = `<!DOCTYPE html>
+                        <html>
+                        <body>
+                        <p id="g-recaptcha-response">Waiting...</p>
+                        <script src="https://www.google.com/recaptcha/api.js?render=` + captcha_renex_site_key + `"></script>
+                        <script>
+                            window.grecaptcha.ready(
+                                function()
+                                {
+                                    document.getElementById('g-recaptcha-response').innerHTML = "Ready. Fetching...";
+
+                                    window.grecaptcha.execute("` + captcha_renex_site_key + `", {action: "` + action + `"}).then(
+                                        function(token)
+                                        {
+                                            document.getElementById('g-recaptcha-response').innerHTML = token;
+
+                                            var xhttp = new XMLHttpRequest();
+                                            xhttp.open("POST", "token", true);
+                                            xhttp.send(token);
+                                        }
+                                    );
+                                }
+                            );
+                        </script>
+                        </body>
+                        </html>`;
+
+            // Create an HTTP server to serve the above HTML and to receive the generated token
+            let firefox;
+            let server = HTTP.createServer(
+                function (req, res)
+                {
+                    req.body = [];
+
+                    req.on(
+                        "data",
+                        function (chunk)
+                        {
+                            req.body.push(chunk);
+                        }
+                    );
+
+                    req.on(
+                        "end",
+                        function ()
+                        {
+                            req.body = Buffer.concat(req.body);
+
+                            if(req.url == "/token" && req.body !== "")
+                            {
+                                firefox.on(
+                                    "close",
+                                    function ()
+                                    {
+                                        resolve(req.body.toString());
+                                    }
+                                );
+
+                                firefox.kill("SIGINT");
+                                server.close();
+                            }
+
+                            res.end(html);
+                        }
+                    )
+                }
+            );
+
+            server.listen(captcha_server_port);
+
+            firefox = ChildProcess.spawn("firefox", ["--headless", "http://" + captcha_fake_subdomain + ".rede-expressos.pt:" + captcha_server_port]);
+
+            setTimeout(
+                function ()
+                {
+                    firefox.on(
+                        "close",
+                        function ()
+                        {
+                            reject("Timed out");
+                        }
+                    );
+
+                    firefox.kill("SIGINT");
+                    server.close();
+                },
+                8000
+            );
+        }
+    );
+}
 function gen_browser_token()
 {
     let result = "";
@@ -143,6 +260,7 @@ async function fetch_destinations(browser_token, origin_id, national, internatio
 async function fetch_ticket_schedules(browser_token, rflex_id, origin_id, destination_id, outgoing_date, passengers)
 {
     let payload = {
+        captcha: await gen_captcha_token("ticketing/schedules"),
         rflexNr: rflex_id > 0 ? rflex_id.toString : "",
         jsonInput: {
             idOrigin: origin_id.toString(),
@@ -180,6 +298,7 @@ async function fetch_ticket_schedules(browser_token, rflex_id, origin_id, destin
 async function create_reservation(browser_token, outgoing_schedule, return_schedule, passengers)
 {
     let payload = {
+        captcha: await gen_captcha_token("reservation/create"),
         jsonInput: {
             outgoing_schedule: outgoing_schedule.schedule_id.toString(),
             outgoing_date: outgoing_schedule.departure_date.toISOString(),
@@ -400,7 +519,7 @@ async function main()
     console.log("Found destination '" + desired_destination + "'. ID: " + desired_destination_id);
 
     let passenger = {
-        fare_type_id: 1,
+        fare_type_id: "1",
         name: "",
         email: "",
         doc: "",
