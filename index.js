@@ -781,6 +781,7 @@ async function main()
 
         while(true)
         {
+            let expired_reservation = false;
             let seat_details = undefined;
 
             while(seat_details === undefined)
@@ -802,6 +803,8 @@ async function main()
                     {
                         console.log("Expired reservation!");
 
+                        expired_reservation = true;
+
                         break;
                     }
                 }
@@ -810,6 +813,8 @@ async function main()
                     if(e.details && e.details.error === "ERROR_API_0" && !e.details.errorDetails)
                     {
                         console.log("Expired reservation!");
+
+                        expired_reservation = true;
 
                         break;
                     }
@@ -825,6 +830,9 @@ async function main()
                     continue;
                 }
             }
+
+            if(expired_reservation)
+                break;
 
             let seat_map = seat_details.outgoing_itinerary.legs[0].available_seats;
             let current_seat = seat_details.outgoing_itinerary.legs[0].assigned_seats[0].seat_no;
