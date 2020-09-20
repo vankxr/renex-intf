@@ -3,13 +3,13 @@ const HTTPS = require("https");
 const ChildProcess = require("child_process");
 
 const captcha_renex_site_key = "6LfSWqkZAAAAAEkwPYmrpzgjwivDtoJBkybcK7v-";
-const captcha_server_port = 3000;
+const captcha_server_port = 53024;
 const captcha_fake_subdomain = "auto";
 
 const desired_origin = "LEIRIA";
 const desired_destination = "LISBOA SETE RIOS";
-const desired_date = new Date(2020, 9 - 1, 24, 14, 45);
-const desired_seat = 30;
+const desired_date = new Date(2020, 9 - 1, 24, 13, 30);
+const desired_seat = parseInt(process.argv[2]);
 
 let origins = [];
 
@@ -63,6 +63,7 @@ async function gen_captcha_token(action)
 
             // Create an HTTP server to serve the above HTML and to receive the generated token
             let firefox;
+            let firefox_timeout;
             let server = HTTP.createServer(
                 function (req, res)
                 {
@@ -92,6 +93,9 @@ async function gen_captcha_token(action)
                                     }
                                 );
 
+                                if(firefox_timeout)
+                                    clearTimeout(firefox_timeout);
+
                                 firefox.kill("SIGINT");
                                 server.close();
                             }
@@ -104,24 +108,32 @@ async function gen_captcha_token(action)
 
             server.listen(captcha_server_port);
 
-            firefox = ChildProcess.spawn("firefox", ["--headless", "http://" + captcha_fake_subdomain + ".rede-expressos.pt:" + captcha_server_port]);
+            function open_firefox()
+            {
+                firefox = ChildProcess.spawn("firefox", ["--headless", "http://" + captcha_fake_subdomain + ".rede-expressos.pt:" + captcha_server_port]);
 
-            setTimeout(
-                function ()
-                {
-                    firefox.on(
-                        "close",
-                        function ()
-                        {
-                            reject("Timed out");
-                        }
-                    );
+                firefox_timeout = setTimeout(
+                    function ()
+                    {
+                        console.log("Timed out waiting for captcha token, retrying...");
 
-                    firefox.kill("SIGINT");
-                    server.close();
-                },
-                8000
-            );
+                        firefox.on(
+                            "close",
+                            function ()
+                            {
+                                ChildProcess.execSync("rm -rf ~/.mozilla");
+
+                                return open_firefox();
+                            }
+                        );
+
+                        firefox.kill("SIGINT");
+                    },
+                    30000
+                );
+            }
+
+            open_firefox();
         }
     );
 }
@@ -218,7 +230,24 @@ async function fetch_origins(browser_token, national, international)
     let res = await https_request(req_options, req_body);
 
     if(res.statusCode != 200)
-        throw new Error("Request unsuccessfull (" + res.statusCode + ")");
+    {
+        let body = undefined;
+
+        try
+        {
+            body = JSON.parse(res.body);
+        }
+        catch (e)
+        {
+        }
+
+        let e = new Error("Request unsuccessfull (" + res.statusCode + ")");
+
+        if(body)
+            e.details = body;
+
+        throw e;
+    }
 
     if(!res.body)
         throw new Error("Invalid body");
@@ -250,7 +279,24 @@ async function fetch_destinations(browser_token, origin_id, national, internatio
     let res = await https_request(req_options, req_body);
 
     if(res.statusCode != 200)
-        throw new Error("Request unsuccessfull (" + res.statusCode + ")");
+    {
+        let body = undefined;
+
+        try
+        {
+            body = JSON.parse(res.body);
+        }
+        catch (e)
+        {
+        }
+
+        let e = new Error("Request unsuccessfull (" + res.statusCode + ")");
+
+        if(body)
+            e.details = body;
+
+        throw e;
+    }
 
     if(!res.body)
         throw new Error("Invalid body");
@@ -288,7 +334,24 @@ async function fetch_ticket_schedules(browser_token, rflex_id, origin_id, destin
     let res = await https_request(req_options, req_body);
 
     if(res.statusCode != 200)
-        throw new Error("Request unsuccessfull (" + res.statusCode + ")");
+    {
+        let body = undefined;
+
+        try
+        {
+            body = JSON.parse(res.body);
+        }
+        catch (e)
+        {
+        }
+
+        let e = new Error("Request unsuccessfull (" + res.statusCode + ")");
+
+        if(body)
+            e.details = body;
+
+        throw e;
+    }
 
     if(!res.body)
         throw new Error("Invalid body");
@@ -362,7 +425,24 @@ async function get_reservation_details(browser_token, reservation_token)
     let res = await https_request(req_options, req_body);
 
     if(res.statusCode != 200)
-        throw new Error("Request unsuccessfull (" + res.statusCode + ")");
+    {
+        let body = undefined;
+
+        try
+        {
+            body = JSON.parse(res.body);
+        }
+        catch (e)
+        {
+        }
+
+        let e = new Error("Request unsuccessfull (" + res.statusCode + ")");
+
+        if(body)
+            e.details = body;
+
+        throw e;
+    }
 
     if(!res.body)
         throw new Error("Invalid body");
@@ -385,7 +465,24 @@ async function get_seat_list(browser_token, reservation_id)
     let res = await https_request(req_options);
 
     if(res.statusCode != 200)
-        throw new Error("Request unsuccessfull (" + res.statusCode + ")");
+    {
+        let body = undefined;
+
+        try
+        {
+            body = JSON.parse(res.body);
+        }
+        catch (e)
+        {
+        }
+
+        let e = new Error("Request unsuccessfull (" + res.statusCode + ")");
+
+        if(body)
+            e.details = body;
+
+        throw e;
+    }
 
     if(!res.body)
         throw new Error("Invalid body");
@@ -430,7 +527,24 @@ async function change_seat(browser_token, reservation_id, outgoing_leg, return_l
     let res = await https_request(req_options, req_body);
 
     if(res.statusCode != 200)
-        throw new Error("Request unsuccessfull (" + res.statusCode + ")");
+    {
+        let body = undefined;
+
+        try
+        {
+            body = JSON.parse(res.body);
+        }
+        catch (e)
+        {
+        }
+
+        let e = new Error("Request unsuccessfull (" + res.statusCode + ")");
+
+        if(body)
+            e.details = body;
+
+        throw e;
+    }
 
     if(!res.body)
         throw new Error("Invalid body");
@@ -445,9 +559,9 @@ async function main()
 
     console.log("Generated browser token: " + browser_token);
 
-    console.log("Fetching origins...");
+    let fetched_origins = undefined;
 
-    let fetched_origins;
+    console.log("Fetching origins...");
 
     try
     {
@@ -457,10 +571,16 @@ async function main()
     }
     catch (e)
     {
-        return console.error("Error fetching origins: " + e);
+        console.error("Error fetching origins!");
+        console.error(e.stack);
+
+        if(e.details)
+            console.error(e.details);
+
+        return;
     }
 
-    let desired_origin_id;
+    let desired_origin_id = undefined;
 
     for(let i = 0; i < fetched_origins.length; i++)
     {
@@ -484,9 +604,9 @@ async function main()
 
     console.log("Found origin '" + desired_origin + "'. ID: " + desired_origin_id);
 
-    console.log("Fetching destinations for '" + desired_origin + "'...");
+    let fetched_destinations = undefined;
 
-    let fetched_destinations;
+    console.log("Fetching destinations for '" + desired_origin + "'...");
 
     try
     {
@@ -496,10 +616,16 @@ async function main()
     }
     catch (e)
     {
-        return console.error("Error fetching destinations: " + e);
+        console.error("Error fetching destinations!");
+        console.error(e.stack);
+
+        if(e.details)
+            console.error(e.details);
+
+        return;
     }
 
-    let desired_destination_id;
+    let desired_destination_id = undefined;
 
     for(let i = 0; i < fetched_destinations.length; i++)
     {
@@ -524,12 +650,12 @@ async function main()
         email: "",
         doc: "",
         promocode: "", // RFLEX ID
-        id: "1"
+        id: 1
     };
 
-    console.log("Fetching ticket schedules for '" + desired_origin + "' > '" + desired_destination + "' on " + desired_date.toString() + "...");
+    let fetched_schedules = undefined;
 
-    let fetched_schedules;
+    console.log("Fetching ticket schedules for '" + desired_origin + "' > '" + desired_destination + "' on " + desired_date.toString() + "...");
 
     try
     {
@@ -544,10 +670,16 @@ async function main()
     }
     catch (e)
     {
-        return console.error("Error fetching schedules: " + e);
+        console.error("Error fetching schedules!");
+        console.error(e.stack);
+
+        if(e.details)
+            console.error(e.details);
+
+        return;
     }
 
-    let desired_schedule;
+    let desired_schedule = undefined;
     let min_schedule_difference = Infinity;
 
     for(let i = 0; i < fetched_schedules.length; i++)
@@ -591,67 +723,107 @@ async function main()
 
         console.log("Generated browser token: " + browser_token);
 
-        console.log("Creating reservation for schedule '" + desired_schedule.schedule_id + "'...");
+        let reservation_token = undefined;
 
-        let reservation_token;
-
-        try
+        while(reservation_token === undefined)
         {
-            reservation_token = await create_reservation(browser_token, desired_schedule, null, passenger);
+            console.log("Creating reservation for schedule '" + desired_schedule.schedule_id + "'...");
 
-            console.log("Created reservation!");
+            try
+            {
+                reservation_token = await create_reservation(browser_token, desired_schedule, null, passenger);
+
+                console.log("Created reservation!");
+            }
+            catch (e)
+            {
+                console.error("Error creating reservation!");
+                console.error(e.stack);
+
+                if(e.details)
+                    console.error(e.details);
+
+                await sleep(1000);
+
+                continue;
+            }
         }
-        catch (e)
+
+        let reservation_id = undefined;
+
+        while(reservation_id === undefined)
         {
-            return console.error("Error creating reservation: " + e);
-        }
+            console.log("Getting reservation details...");
 
-        console.log("Getting reservation details...");
+            try
+            {
+                reservation_details = await get_reservation_details(browser_token, reservation_token);
 
-        let reservation_id;
+                //console.log(require("util").inspect(reservation_details, {showHidden: false, depth: null}))
 
-        try
-        {
-            reservation_details = await get_reservation_details(browser_token, reservation_token);
+                reservation_id = reservation_details.reservationId;
 
-            //console.log(require("util").inspect(reservation_details, {showHidden: false, depth: null}))
+                console.log("Reservation ID: " + reservation_id);
+            }
+            catch (e)
+            {
+                console.error("Error getting reservation details!");
+                console.error(e.stack);
 
-            reservation_id = reservation_details.reservationId;
+                if(e.details)
+                    console.error(e.details);
 
-            console.log("Reservation ID: " + reservation_id);
-        }
-        catch (e)
-        {
-            return console.error("Error getting reservation details: " + e);
+                await sleep(1000);
+
+                continue;
+            }
         }
 
         while(true)
         {
-            console.log("Getting seat details...");
+            let seat_details = undefined;
 
-            let seat_details;
-
-            try
+            while(seat_details === undefined)
             {
-                seat_details = await get_seat_list(browser_token, reservation_id);
+                console.log("Getting seat details...");
 
-                //console.log(require("util").inspect(seat_details, {showHidden: false, depth: null}))
-
-                if(!seat_details.outgoing_itinerary ||
-                    !seat_details.outgoing_itinerary.legs ||
-                    !seat_details.outgoing_itinerary.legs.length ||
-                    !seat_details.outgoing_itinerary.legs[0].available_seats ||
-                    !seat_details.outgoing_itinerary.legs[0].assigned_seats ||
-                    !seat_details.outgoing_itinerary.legs[0].assigned_seats.length)
+                try
                 {
-                    console.log("Expired reservation!");
+                    seat_details = await get_seat_list(browser_token, reservation_id);
 
-                    break;
+                    //console.log(require("util").inspect(seat_details, {showHidden: false, depth: null}))
+
+                    if(!seat_details.outgoing_itinerary ||
+                        !seat_details.outgoing_itinerary.legs ||
+                        !seat_details.outgoing_itinerary.legs.length ||
+                        !seat_details.outgoing_itinerary.legs[0].available_seats ||
+                        !seat_details.outgoing_itinerary.legs[0].assigned_seats ||
+                        !seat_details.outgoing_itinerary.legs[0].assigned_seats.length)
+                    {
+                        console.log("Expired reservation!");
+
+                        break;
+                    }
                 }
-            }
-            catch (e)
-            {
-                return console.error("Error getting seat details: " + e);
+                catch (e)
+                {
+                    if(e.details && e.details.error === "ERROR_API_0" && !e.details.errorDetails)
+                    {
+                        console.log("Expired reservation!");
+
+                        break;
+                    }
+
+                    console.error("Error getting seat details!");
+                    console.error(e.stack);
+
+                    if(e.details)
+                        console.error(e.details);
+
+                    await sleep(1000);
+
+                    continue;
+                }
             }
 
             let seat_map = seat_details.outgoing_itinerary.legs[0].available_seats;
@@ -667,17 +839,32 @@ async function main()
                 }
                 else
                 {
-                    console.log("Changing current seat " + current_seat + " to " + desired_seat);
+                    let seat_changed = false;
 
-                    try
+                    while(!seat_changed)
                     {
-                        await change_seat(browser_token, reservation_id, 1, null, current_seat, desired_seat);
+                        console.log("Changing current seat " + current_seat + " to " + desired_seat);
 
-                        //console.log(require("util").inspect(seat_details, {showHidden: false, depth: null}))
-                    }
-                    catch (e)
-                    {
-                        return console.error("Error changing seat: " + e);
+                        try
+                        {
+                            await change_seat(browser_token, reservation_id, 1, null, current_seat, desired_seat);
+
+                            seat_changed = true;
+
+                            //console.log(require("util").inspect(result, {showHidden: false, depth: null}))
+                        }
+                        catch (e)
+                        {
+                            console.error("Error changing seat!");
+                            console.error(e.stack);
+
+                            if(e.details)
+                                console.error(e.details);
+
+                            await sleep(1000);
+
+                            continue;
+                        }
                     }
                 }
 
