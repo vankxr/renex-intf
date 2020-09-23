@@ -3,7 +3,7 @@ const HTTPS = require("https");
 const ChildProcess = require("child_process");
 
 const captcha_renex_site_key = "6LfSWqkZAAAAAEkwPYmrpzgjwivDtoJBkybcK7v-";
-const captcha_server_port = 53024;
+const captcha_server_port = 53000 + Math.floor(Math.random() * 1000);
 const captcha_fake_subdomain = "auto";
 
 const desired_origin = "LEIRIA";
@@ -110,6 +110,8 @@ async function gen_captcha_token(action)
 
             function open_firefox()
             {
+                ChildProcess.execSync("rm -rf ~/.mozilla");
+
                 firefox = ChildProcess.spawn("firefox", ["--headless", "http://" + captcha_fake_subdomain + ".rede-expressos.pt:" + captcha_server_port]);
 
                 firefox_timeout = setTimeout(
@@ -117,17 +119,9 @@ async function gen_captcha_token(action)
                     {
                         console.log("Timed out waiting for captcha token, retrying...");
 
-                        firefox.on(
-                            "close",
-                            function ()
-                            {
-                                ChildProcess.execSync("rm -rf ~/.mozilla");
-
-                                return open_firefox();
-                            }
-                        );
-
                         firefox.kill("SIGINT");
+
+                        setTimeout(open_firefox, 1000);
                     },
                     30000
                 );
